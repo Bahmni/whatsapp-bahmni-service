@@ -9,5 +9,4 @@ public class WhatsappBahmniServiceApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(WhatsappBahmniServiceApplication.class, args);
 	}
-
 }
