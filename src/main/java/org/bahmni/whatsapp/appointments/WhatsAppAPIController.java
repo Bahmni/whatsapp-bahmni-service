@@ -43,6 +43,7 @@ public class WhatsAppAPIController {
         String jsonResponse = responseEntity.getBody();
 
         JSONObject responseJson = new JSONObject(jsonResponse);
+        System.out.println("response json: " + responseJson);
 
         String message_id = "";
         JSONArray messages = responseJson.getJSONArray("messages");
@@ -107,6 +108,7 @@ public class WhatsAppAPIController {
             textBody.put("body", reply_message);
 
             data.put("text", textBody);
+            System.out.println("Data blob: " + data);
 
             String phone_number_id = "109855275525315";
             String token = "EAAJLW2eCmuQBOxEgy8ZAwGUgd4UZBcoPhZBkSKJGhtbZAvdpW6GLL3tE90nFd9VO4WBySlH9o3pH7ZAmNiWIEdHlc1l0UAqBpsQAibtKU4ZAELF75rSUttKCwuBJuMNEcynFeArbVZCXMesFsON0NoVoIMdJzq6bMhIGnzgR3bdeuWUVGGqZAS3UXyjOYvAz58uuyHvoj4DMBVZBpWogItuSp1qKo0jMZD";
