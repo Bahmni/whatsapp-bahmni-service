@@ -2,7 +2,6 @@ name: Build package
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
 
 jobs:
   build-publish-package:
