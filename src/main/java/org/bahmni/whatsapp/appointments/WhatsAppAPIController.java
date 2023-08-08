@@ -1,10 +1,17 @@
 package org.bahmni.whatsapp.appointments;
 
+import org.bahmni.webclients.ClientCookies;
+import org.bahmni.whatsapp.appointments.contract.patient.OpenMRSPatientFullRepresentation;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+import org.bahmni.whatsapp.appointments.services.OpenMRSService;
+
+import java.io.IOException;
+import java.text.ParseException;
 
 @RestController
 public class WhatsAppAPIController {
@@ -13,14 +20,24 @@ public class WhatsAppAPIController {
 //    public String getMessage() {
 //        return "hello world";
 //    }
+    @Autowired
+OpenMRSService openMRSService;
 
-    public String sendMessage(String phoneNumberId, String token, JSONObject data) {
+
+    public String sendMessage(String phoneNumberId, String token, JSONObject data) throws IOException, ParseException {
         String url = "https://graph.facebook.com/v17.0/" + phoneNumberId + "/messages?access_token=" + token;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         HttpEntity<String> requestEntity = new HttpEntity<>(data.toString(), headers);
+
+//        openMRSService.getConnection();
+//        ClientCookies cookies = openMRSService.getCookies();
+//        System.out.println(cookies);
+
+        OpenMRSPatientFullRepresentation patient_info = openMRSService.getPatientFR("https://demo-lite.mybahmni.in/openmrs/ws/atomfeed/patient/recent");
+        System.out.println(patient_info);
 
         RestTemplate restTemplate = new RestTemplate();
         ResponseEntity<String> responseEntity = restTemplate.postForEntity(url, requestEntity, String.class);
@@ -60,7 +77,7 @@ public class WhatsAppAPIController {
 
     //Handling of Notifications about patient's messages or message sent status changes from Cloud API
     @RequestMapping( method = RequestMethod.POST, value = "webhook")
-    public ResponseEntity<String> notificationHandler(@RequestBody String requestBody){
+    public ResponseEntity<String> notificationHandler(@RequestBody String requestBody) throws IOException, ParseException {
         System.out.println("requestBody: " + requestBody);
 
         // Parse the JSON request body
@@ -120,7 +137,7 @@ public class WhatsAppAPIController {
             //                };
 
             String phone_number_id = "109855275525315";
-            String token = "WhatsApp_Access_Token";
+            String token = "EAAJLW2eCmuQBO11hvQZCGxyZATZBZBAj4EJCZCCFZC9WKCf9HwZCwS4eqeF0MBwfE07u4EoeMFpZC5NBVmFHB6NMjgh4w6XL3XACrUzwpn8rdr75MFbACE88WMnyGfPIhlInPU8V55aPFRLNR740XtykoaraUF2m2dsloUFDZBSHQ94oZCEulZCnZA33s79gSrZAUe68zVJGZAlHkyynozbNZCfzD7cmOIWGN0ZD";
             String wa_id = sendMessage(phone_number_id, token, data);
 
             System.out.println("whatsapp message id: " + wa_id);

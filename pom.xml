@@ -37,6 +37,11 @@
 			<artifactId>json</artifactId>
 			<version>20230227</version>
 		</dependency>
+		<dependency>
+			<groupId>org.bahmni.module</groupId>
+			<artifactId>web-clients</artifactId>
+			<version>0.94.3</version>
+		</dependency>
 	</dependencies>
 
 	<build>
