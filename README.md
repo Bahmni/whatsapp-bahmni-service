@@ -2,13 +2,17 @@
 A microservice for Whatsapp to communicate to Bahmni (for Appointment booking) by Patients.
 
 # Requirements
-- java version 20.0.1
+- java version 1.8
 - Apache Maven 3.9.3
 
 # Clone the Repository
-git clone https://github.com/Bahmni/whatsapp-bahmni-service.git
+> git clone [whatsapp-bahmni-service](https://github.com/Bahmni/whatsapp-bahmni-service.git) repo
 
-cd whatsapp-bahmni-service
+> cd whatsapp-bahmni-service
+
+# Build
+- Checkout the [whatsapp-bahmni-service](https://github.com/Bahmni/whatsapp-bahmni-service) repository
+- Generate the jar file by running `mvn clean install -DskipTests`
 
 # WhatsApp Cloud API Set Up and Webhook Configuration
 
