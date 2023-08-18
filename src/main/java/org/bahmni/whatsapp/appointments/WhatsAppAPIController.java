@@ -2,6 +2,7 @@ package org.bahmni.whatsapp.appointments;
 
 import org.bahmni.webclients.ClientCookies;
 import org.bahmni.whatsapp.appointments.contract.patient.OpenMRSPatientFullRepresentation;
+import org.bahmni.whatsapp.appointments.services.OpenmrsLoginImpl;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,9 @@ public class WhatsAppAPIController {
     @Autowired
 OpenMRSService openMRSService;
 
+    @Autowired
+    OpenmrsLoginImpl openmrsLogin;
+
 
     public String sendMessage(String phoneNumberId, String token, JSONObject data) throws IOException, ParseException {
         String url = "https://graph.facebook.com/v17.0/" + phoneNumberId + "/messages?access_token=" + token;
@@ -32,12 +36,12 @@ OpenMRSService openMRSService;
 
         HttpEntity<String> requestEntity = new HttpEntity<>(data.toString(), headers);
 
-//        openMRSService.getConnection();
-//        ClientCookies cookies = openMRSService.getCookies();
+//        openmrsLogin.getConnection();
+//        ClientCookies cookies = openmrsLogin.getCookies();
 //        System.out.println(cookies);
 
-        OpenMRSPatientFullRepresentation patient_info = openMRSService.getPatientFR("https://demo-lite.mybahmni.in/openmrs/ws/atomfeed/patient/recent");
-        System.out.println(patient_info);
+//        OpenMRSPatientFullRepresentation patient_info = openMRSService.getPatientFR("https://demo-lite.mybahmni.in/openmrs/ws/atomfeed/patient/recent");
+//        System.out.println(patient_info);
 
         RestTemplate restTemplate = new RestTemplate();
         ResponseEntity<String> responseEntity = restTemplate.postForEntity(url, requestEntity, String.class);
@@ -63,10 +67,18 @@ OpenMRSService openMRSService;
     @RequestMapping(method = RequestMethod.GET, value = "webhook")
     public ResponseEntity<String> verifyWebhook(@RequestParam("hub.mode") String mode,
                                                 @RequestParam("hub.challenge") String challenge,
-                                                @RequestParam("hub.verify_token") String token) {
+                                                @RequestParam("hub.verify_token") String token) throws IOException, ParseException {
         System.out.println(mode);
         System.out.println(challenge);
         System.out.println(token);
+
+//        OpenMRSPatientFullRepresentation patient_info = openMRSService.getPatientFR("https://demo-lite.mybahmni.in/openmrs/ws/atomfeed/patient/recent");
+//        System.out.println(patient_info);
+
+        openmrsLogin.getConnection();
+        ClientCookies cookies = openmrsLogin.getCookies();
+        System.out.println("Cookie: " + cookies);
+
         if (mode.equals("subscribe") && token.equals("abc123")) {
             System.out.println("Webhook Verified");
             return new ResponseEntity<>(challenge, HttpStatus.OK);
@@ -117,15 +129,79 @@ OpenMRSService openMRSService;
             String from = msg.getString("from"); // Phone Number of Patient
             String reply_message = "Thanks for contacting Bahmni, Appointments Booking Feature will be live soon."; // Reply message to sent back to Patient
 
+            String first_template_body = "Hello Aniket,\n" +
+                    "\n" +
+                    "We appreciate your communication with Bahmni. Kindly choose an option from the provided list below to indicate your intended action.\n" +
+                    "\n" +
+                    "Thank you.";
+
             JSONObject data = new JSONObject();
             data.put("messaging_product", "whatsapp");
             data.put("to", from);
-            data.put("type", "text");
+            data.put("type", "interactive");
 
-            JSONObject textBody = new JSONObject();
-            textBody.put("body", reply_message);
+            JSONObject interactiveObj = new JSONObject();
+            interactiveObj.put("type", "list");
 
-            data.put("text", textBody);
+            JSONObject bodyObj = new JSONObject();
+            bodyObj.put("text", first_template_body);
+
+            interactiveObj.put("body", bodyObj);
+
+            JSONObject footerObj = new JSONObject();
+            footerObj.put("text", "Bahmni");
+
+            interactiveObj.put("footer", footerObj);
+
+            JSONObject actionObj = new JSONObject();
+            actionObj.put("button", "Choose Action");
+
+            JSONArray sectionsArray = new JSONArray();
+
+            JSONObject sectionObj = new JSONObject();
+            sectionObj.put("title", "Please choose an action.");
+
+            JSONArray rowArray = new JSONArray();
+
+            JSONObject rowObj1 = new JSONObject();
+            rowObj1.put("id", "0");
+            rowObj1.put("title", "Book an Appointment");
+
+            rowArray.put(rowObj1);
+
+            JSONObject rowObj2 = new JSONObject();
+            rowObj2.put("id", "1");
+            rowObj2.put("title", "Upcoming Appointments");
+
+            rowArray.put(rowObj2);
+
+            JSONObject rowObj3 = new JSONObject();
+            rowObj3.put("id", "2");
+            rowObj3.put("title", "Cancel an Appointment");
+
+            rowArray.put(rowObj3);
+
+            JSONObject rowObj4 = new JSONObject();
+            rowObj4.put("id", "3");
+            rowObj4.put("title", "Reschedule Appointment");
+
+            rowArray.put(rowObj4);
+
+            sectionObj.put("rows", rowArray);
+
+            sectionsArray.put(sectionObj);
+
+            actionObj.put("sections", sectionsArray);
+
+            interactiveObj.put("action", actionObj);
+
+            data.put("interactive", interactiveObj);
+
+            //Json Object for sending a normal text message to patient
+//            JSONObject textBody = new JSONObject();
+//            textBody.put("body", reply_message);
+//
+//            data.put("text", textBody);
             System.out.println("Data blob: " + data);
 
             //The data blob would look something like this (for reference):
@@ -137,7 +213,7 @@ OpenMRSService openMRSService;
             //                };
 
             String phone_number_id = "109855275525315";
-            String token = "EAAJLW2eCmuQBO11hvQZCGxyZATZBZBAj4EJCZCCFZC9WKCf9HwZCwS4eqeF0MBwfE07u4EoeMFpZC5NBVmFHB6NMjgh4w6XL3XACrUzwpn8rdr75MFbACE88WMnyGfPIhlInPU8V55aPFRLNR740XtykoaraUF2m2dsloUFDZBSHQ94oZCEulZCnZA33s79gSrZAUe68zVJGZAlHkyynozbNZCfzD7cmOIWGN0ZD";
+            String token = "EAAJLW2eCmuQBOwslzbWbNHrDYBipOOPCZA0UjOR5X1o7K4YgEK8rP08c1LmGgO3vDoml1ThPK5zonz2Cr9bG5bRqsYUUFLFfkSx5czzloS39LuGaxspES0HtuohPnxXJAmGGxmb9W3echlhddKlhTjzwAv83PkQNTYbADSAVdKGHjfVplkEVjzSad6jxuu8bQi8Btpzb0BMzWQpnvDZAKNnskZD";
             String wa_id = sendMessage(phone_number_id, token, data);
 
             System.out.println("whatsapp message id: " + wa_id);
