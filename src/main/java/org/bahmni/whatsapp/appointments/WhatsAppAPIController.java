@@ -1,5 +1,9 @@
 package org.bahmni.whatsapp.appointments;
 
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.bahmni.webclients.ClientCookies;
 import org.bahmni.whatsapp.appointments.contract.patient.OpenMRSPatientFullRepresentation;
 import org.bahmni.whatsapp.appointments.services.OpenmrsLoginImpl;
@@ -17,12 +21,8 @@ import java.text.ParseException;
 @RestController
 public class WhatsAppAPIController {
 
-//    @RequestMapping(method = RequestMethod.GET, value = "test")
-//    public String getMessage() {
-//        return "hello world";
-//    }
     @Autowired
-OpenMRSService openMRSService;
+    OpenMRSService openMRSService;
 
     @Autowired
     OpenmrsLoginImpl openmrsLogin;
@@ -75,9 +75,9 @@ OpenMRSService openMRSService;
 //        OpenMRSPatientFullRepresentation patient_info = openMRSService.getPatientFR("https://demo-lite.mybahmni.in/openmrs/ws/atomfeed/patient/recent");
 //        System.out.println(patient_info);
 
-        openmrsLogin.getConnection();
-        ClientCookies cookies = openmrsLogin.getCookies();
-        System.out.println("Cookie: " + cookies);
+//        openmrsLogin.getConnection();
+//        ClientCookies cookies = openmrsLogin.getCookies();
+//        System.out.println("Cookie: " + cookies);
 
         if (mode.equals("subscribe") && token.equals("abc123")) {
             System.out.println("Webhook Verified");
@@ -126,8 +126,30 @@ OpenMRSService openMRSService;
 
         //check if a message sent by the patient is of type text or not.
         if (msg.getString("type").equals("text")) {
+            System.out.println("message: " + msg);
             String from = msg.getString("from"); // Phone Number of Patient
             String reply_message = "Thanks for contacting Bahmni, Appointments Booking Feature will be live soon."; // Reply message to sent back to Patient
+
+            openmrsLogin.getConnection();
+            ClientCookies cookies = openmrsLogin.getCookies();
+            System.out.println("Cookie: " + cookies);
+
+            String patientUUID = "ABC200012";
+            String loginLocationUuid= "833d0c66-e29a-4d31-ac13-ca9050d1bfa9";
+
+            String URI = "https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/bahmni/search/patient/lucene?identifier=" + patientUUID + "&loginLocationUuid=" + loginLocationUuid;
+
+            HttpGet request = new HttpGet(URI);
+            request.addHeader("Cookie", String.valueOf(cookies));
+
+//            JSONObject params = new JSONObject();
+//            params.put("Identifier", "ABC200012");
+//            params.put("loginLocationUuid", "833d0c66-e29a-4d31-ac13-ca9050d1bfa9");
+            CloseableHttpClient httpClient = HttpClients.createDefault();
+            HttpResponse response = httpClient.execute(request);
+            httpClient.close();
+
+            System.out.println("response: " + response);
 
             String first_template_body = "Hello Aniket,\n" +
                     "\n" +
@@ -203,17 +225,8 @@ OpenMRSService openMRSService;
 //
 //            data.put("text", textBody);
             System.out.println("Data blob: " + data);
-
-            //The data blob would look something like this (for reference):
-            //                data = {
-            //                        messaging_product: "whatsapp",
-            //                        to: from,
-            //                        type: "text",
-            //                        text: { body: reply_message }
-            //                };
-
             String phone_number_id = "109855275525315";
-            String token = "EAAJLW2eCmuQBOwslzbWbNHrDYBipOOPCZA0UjOR5X1o7K4YgEK8rP08c1LmGgO3vDoml1ThPK5zonz2Cr9bG5bRqsYUUFLFfkSx5czzloS39LuGaxspES0HtuohPnxXJAmGGxmb9W3echlhddKlhTjzwAv83PkQNTYbADSAVdKGHjfVplkEVjzSad6jxuu8bQi8Btpzb0BMzWQpnvDZAKNnskZD";
+            String token = "EAAJLW2eCmuQBO4GlCmr0FVnqiav90W3NgV9SVdiUBeOkLVN9KXmVyU2QEfOkYMOUZCa5X7N49HPtQ8xfBAIsTZAw0NQOypFevJjFEwKm3EsLM8rDsG4gZAQMFRl9fAMzOG7swj38TZBZB5bzjGYVnw5vIpHEhFuJEdKv0Sm4WPSr5twAF9nws00puiFDGjeqRmYj6n8YZAjHxKMnMpNRpSRZA6unyUZD";
             String wa_id = sendMessage(phone_number_id, token, data);
 
             System.out.println("whatsapp message id: " + wa_id);
