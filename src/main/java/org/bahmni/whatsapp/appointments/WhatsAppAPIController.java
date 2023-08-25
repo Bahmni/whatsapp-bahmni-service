@@ -7,6 +7,7 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.bahmni.webclients.ClientCookies;
 import org.bahmni.whatsapp.appointments.contract.patient.OpenMRSPatientFullRepresentation;
+import org.bahmni.whatsapp.appointments.services.FhirResourceService;
 import org.bahmni.whatsapp.appointments.services.OpenmrsLoginImpl;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -28,30 +29,45 @@ public class WhatsAppAPIController {
     @Autowired
     OpenmrsLoginImpl openmrsLogin;
 
-    public String fetchPatientName(String patientUUID, String loginLocationUuid) throws IOException {
+    @Autowired
+    FhirResourceService fhirResourceService;
+
+    public String fetchPatientName(String patientUUID, String loginLocationUuid) throws IOException, ParseException {
         openmrsLogin.getConnection();
         ClientCookies cookies = openmrsLogin.getCookies();
         System.out.println("Cookie: " + cookies);
 
-        String URI = "https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/bahmni/search/patient/lucene?identifier=" + patientUUID + "&loginLocationUuid=" + loginLocationUuid;
+//        OpenMRSPatientFullRepresentation patient_info = openMRSService.getPatientFR("https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/patient?identifier=" + patientUUID + "&v=full");
+//        System.out.println("patient info: " + patient_info);
 
-        HttpGet request = new HttpGet(URI);
+        //TODO: Replace hardcoded Patient UUID with appropriate API
+        String fhirBody = fhirResourceService.getResourceById("Patient", "5e91bcf8-aeec-4c7b-ab60-8c2aeb05cbee");
+        System.out.println("fhir body: " + fhirBody);
 
-        String cookieValue = cookies.get("JSESSIONID");
-        request.addHeader("Cookie", "JSESSIONID=" + cookieValue);
+        JSONObject resourceObject = new JSONObject(fhirBody);
+        System.out.println("resource body: " + resourceObject);
 
-        CloseableHttpClient httpClient = HttpClients.createDefault();
-        HttpResponse response = httpClient.execute(request);
-        httpClient.close();
+//        String URI = "https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/bahmni/search/patient/lucene?identifier=" + patientUUID + "&loginLocationUuid=" + loginLocationUuid;
 
-        String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
-        System.out.println("response body: " + responseBody);
+//        HttpGet request = new HttpGet(URI);
+//
+//        String cookieValue = cookies.get("JSESSIONID");
+//        request.addHeader("Cookie", "JSESSIONID=" + cookieValue);
+//
+//        CloseableHttpClient httpClient = HttpClients.createDefault();
+//        HttpResponse response = httpClient.execute(request);
+//        httpClient.close();
+//
+//        String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+//        System.out.println("response body: " + responseBody);
+//
+//        JSONObject responseObject = new JSONObject(responseBody);
 
-        JSONObject responseObject = new JSONObject(responseBody);
+//        String firstName = responseObject.getJSONArray("pageOfResults").getJSONObject(0).getString("givenName");
+//        String familyName = responseObject.getJSONArray("pageOfResults").getJSONObject(0).getString("familyName");
 
-        String firstName = responseObject.getJSONArray("pageOfResults").getJSONObject(0).getString("givenName");
-        String familyName = responseObject.getJSONArray("pageOfResults").getJSONObject(0).getString("familyName");
-//        String familyName = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getJSONArray("name").getJSONObject(0).getString("family");
+        String firstName = resourceObject.getJSONArray("name").getJSONObject(0).getJSONArray("given").getString(0);
+        String familyName = resourceObject.getJSONArray("name").getJSONObject(0).getString("family");
 
         return firstName + " " + familyName;
     }
@@ -183,9 +199,6 @@ public class WhatsAppAPIController {
         System.out.println(challenge);
         System.out.println(token);
 
-//        OpenMRSPatientFullRepresentation patient_info = openMRSService.getPatientFR("https://demo-lite.mybahmni.in/openmrs/ws/atomfeed/patient/recent");
-//        System.out.println(patient_info);
-
         openmrsLogin.getConnection();
         ClientCookies cookies = openmrsLogin.getCookies();
         System.out.println("Cookie: " + cookies);
@@ -239,7 +252,7 @@ public class WhatsAppAPIController {
         String from = msg.getString("from"); // Phone Number of Patient
 
         String phone_number_id = "109855275525315";
-        String token = "EAAJLW2eCmuQBO1u7FabNP4uKwDCXzZALY6NMMkwDLlY4PG5yJVWoLkjOodj2uzJ01fZAfoRoQoyDtPEsi33saZCOH6hlTjwsW05la6nE42kmBRJrZAwoirnYekDtsuVXGg7WuRoKkZCnSRUtRo09RM5H27KV5vhZCrZCzDBVA4qf1ZBBkwFMTkehLpNgdr1J22wAEhSU16KuJshdrS5TZBHZBOusgRac4ZD";
+        String token = "EAAJLW2eCmuQBOzab3Uzs2vnmAFyC3agVMpOSQLbmQB3DUWuzqdRg7c0xDXw9fV4P2JIXR1guqE5mxmhxZCd3HmZBl3alKwqRJ5Tz3ACCgov0a0woV23WmvWkZADpXlnWrgs7QxVjYq55mFr3S4T1QhDyPBduFNSIryoFB6GrkrtsR3UYgmjs5vcMN3xdCR3mbIT8pXIXAZCOBMofJPZAldkogZAIgZD";
 
         if (msgType.equals("text")) {
             System.out.println("message: " + msg);
