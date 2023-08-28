@@ -19,12 +19,10 @@ import org.bahmni.whatsapp.appointments.services.OpenMRSService;
 
 import java.io.IOException;
 import java.text.ParseException;
+import java.util.*;
 
 @RestController
 public class WhatsAppAPIController {
-
-    @Autowired
-    OpenMRSService openMRSService;
 
     @Autowired
     OpenmrsLoginImpl openmrsLogin;
@@ -32,42 +30,41 @@ public class WhatsAppAPIController {
     @Autowired
     FhirResourceService fhirResourceService;
 
-    public String fetchPatientName(String patientUUID, String loginLocationUuid) throws IOException, ParseException {
+    HashMap<Integer,String> serviceMap= new HashMap<>();
+
+    public String fetchPatientName(String patientUUID) throws IOException, ParseException {
+//        String fhirBody = fhirResourceService.getResourceById("Patient", "5e91bcf8-aeec-4c7b-ab60-8c2aeb05cbee");
+//        System.out.println("fhir body: " + fhirBody);
+//
+//        JSONObject resourceObject = new JSONObject(fhirBody);
+//        System.out.println("resource body: " + resourceObject);
+
+//        String firstName = resourceObject.getJSONArray("name").getJSONObject(0).getJSONArray("given").getString(0);
+//        String familyName = resourceObject.getJSONArray("name").getJSONObject(0).getString("family");
+
         openmrsLogin.getConnection();
         ClientCookies cookies = openmrsLogin.getCookies();
         System.out.println("Cookie: " + cookies);
 
-//        OpenMRSPatientFullRepresentation patient_info = openMRSService.getPatientFR("https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/patient?identifier=" + patientUUID + "&v=full");
-//        System.out.println("patient info: " + patient_info);
+        String URI = "https://demo-lite.mybahmni.in/openmrs/ws/fhir2/R4/Patient?identifier=" + patientUUID;
 
-        //TODO: Replace hardcoded Patient UUID with appropriate API
-        String fhirBody = fhirResourceService.getResourceById("Patient", "5e91bcf8-aeec-4c7b-ab60-8c2aeb05cbee");
-        System.out.println("fhir body: " + fhirBody);
+        HttpGet request = new HttpGet(URI);
 
-        JSONObject resourceObject = new JSONObject(fhirBody);
-        System.out.println("resource body: " + resourceObject);
+        String cookieValue = cookies.get("JSESSIONID");
+        request.addHeader("Cookie", "JSESSIONID=" + cookieValue);
 
-//        String URI = "https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/bahmni/search/patient/lucene?identifier=" + patientUUID + "&loginLocationUuid=" + loginLocationUuid;
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        HttpResponse response = httpClient.execute(request);
 
-//        HttpGet request = new HttpGet(URI);
-//
-//        String cookieValue = cookies.get("JSESSIONID");
-//        request.addHeader("Cookie", "JSESSIONID=" + cookieValue);
-//
-//        CloseableHttpClient httpClient = HttpClients.createDefault();
-//        HttpResponse response = httpClient.execute(request);
-//        httpClient.close();
-//
-//        String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
-//        System.out.println("response body: " + responseBody);
-//
-//        JSONObject responseObject = new JSONObject(responseBody);
+        String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+        System.out.println("response body: " + responseBody);
 
-//        String firstName = responseObject.getJSONArray("pageOfResults").getJSONObject(0).getString("givenName");
-//        String familyName = responseObject.getJSONArray("pageOfResults").getJSONObject(0).getString("familyName");
+        httpClient.close();
 
-        String firstName = resourceObject.getJSONArray("name").getJSONObject(0).getJSONArray("given").getString(0);
-        String familyName = resourceObject.getJSONArray("name").getJSONObject(0).getString("family");
+        JSONObject responseObject = new JSONObject(responseBody);
+
+        String firstName = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getJSONArray("name").getJSONObject(0).getJSONArray("given").getString(0);
+        String familyName = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getJSONArray("name").getJSONObject(0).getString("family");
 
         return firstName + " " + familyName;
     }
@@ -145,8 +142,90 @@ public class WhatsAppAPIController {
         return data;
     }
 
-    public JSONObject createTextMessage(String from){
-        String reply_message = "Thanks for contacting Bahmni, Appointments Booking Feature will be live soon."; // Reply message to sent back to Patient
+    public JSONObject createServiceTemplate(String from) throws IOException {
+        openmrsLogin.getConnection();
+        ClientCookies cookies = openmrsLogin.getCookies();
+        System.out.println("Cookie: " + cookies);
+
+        String URI = "https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/appointmentService/all/full";
+
+        HttpGet request = new HttpGet(URI);
+
+        String cookieValue = cookies.get("JSESSIONID");
+        request.addHeader("Cookie", "JSESSIONID=" + cookieValue);
+
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        HttpResponse response = httpClient.execute(request);
+        httpClient.close();
+
+        String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
+        System.out.println("response body: " + responseBody);
+
+        JSONArray serviceArray = new JSONArray(responseBody);
+
+        String service_template_body = "Please choose a service from the below list";
+
+        JSONObject data = new JSONObject();
+
+        data.put("messaging_product", "whatsapp");
+        data.put("to", from);
+        data.put("type", "interactive");
+
+        JSONObject interactiveObj = new JSONObject();
+        interactiveObj.put("type", "list");
+
+        JSONObject bodyObj = new JSONObject();
+        bodyObj.put("text", service_template_body);
+
+        interactiveObj.put("body", bodyObj);
+
+        JSONObject footerObj = new JSONObject();
+        footerObj.put("text", "Bahmni");
+
+        interactiveObj.put("footer", footerObj);
+
+        JSONObject actionObj = new JSONObject();
+        actionObj.put("button", "Choose Service");
+
+        JSONArray sectionsArray = new JSONArray();
+
+        JSONObject sectionObj = new JSONObject();
+        sectionObj.put("title", "Please choose a Service.");
+
+        JSONArray rowArray = new JSONArray();
+
+        for (int i = 0; i < serviceArray.length(); i++) {
+            JSONObject service = serviceArray.getJSONObject(i);
+
+            String serviceName = service.getString("name");
+            int serviceID = service.getInt("appointmentServiceId") - 1;
+
+            serviceMap.put(serviceID, service.getString("uuid"));
+
+//            serviceName = serviceName.substring(0, Math.min(serviceName.length(), 24));
+            serviceName = ( serviceName.length () > 24 ) ? serviceName.substring ( 0 , 21 ).concat ( "…" ) : serviceName;
+
+            JSONObject rowObj = new JSONObject();
+            rowObj.put("id", Integer.toString(serviceID));
+            rowObj.put("title", serviceName);
+
+            rowArray.put(rowObj);
+        }
+
+        sectionObj.put("rows", rowArray);
+
+        sectionsArray.put(sectionObj);
+
+        actionObj.put("sections", sectionsArray);
+
+        interactiveObj.put("action", actionObj);
+
+        data.put("interactive", interactiveObj);
+
+        return data;
+    }
+
+    public JSONObject createTextMessage(String from, String reply_message){
 
         JSONObject data = new JSONObject();
 
@@ -190,7 +269,6 @@ public class WhatsAppAPIController {
         return message_id;
     }
 
-    //Webhook Verification and Configuration
     @RequestMapping(method = RequestMethod.GET, value = "webhook")
     public ResponseEntity<String> verifyWebhook(@RequestParam("hub.mode") String mode,
                                                 @RequestParam("hub.challenge") String challenge,
@@ -214,7 +292,6 @@ public class WhatsAppAPIController {
     //Handling of Notifications about patient's messages or message sent status changes from Cloud API
     @RequestMapping( method = RequestMethod.POST, value = "webhook")
     public ResponseEntity<String> notificationHandler(@RequestBody String requestBody) throws IOException, ParseException {
-        System.out.println("requestBody: " + requestBody);
 
         // Parse the JSON request body
         JSONObject body = new JSONObject(requestBody);
@@ -225,7 +302,6 @@ public class WhatsAppAPIController {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
 
-        //For reference of how a Notification payload object looks like: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#webhooks-notification-payload-reference
 
         if (!body.has("entry") ||
                 body.getJSONArray("entry").length() <= 0 ||
@@ -252,15 +328,14 @@ public class WhatsAppAPIController {
         String from = msg.getString("from"); // Phone Number of Patient
 
         String phone_number_id = "109855275525315";
-        String token = "EAAJLW2eCmuQBOzab3Uzs2vnmAFyC3agVMpOSQLbmQB3DUWuzqdRg7c0xDXw9fV4P2JIXR1guqE5mxmhxZCd3HmZBl3alKwqRJ5Tz3ACCgov0a0woV23WmvWkZADpXlnWrgs7QxVjYq55mFr3S4T1QhDyPBduFNSIryoFB6GrkrtsR3UYgmjs5vcMN3xdCR3mbIT8pXIXAZCOBMofJPZAldkogZAIgZD";
+        String token = "EAAJLW2eCmuQBO3arqKcNcvc27FYSgGQZBSpfOXdEsPamQ5dZAPSXy2Vt4a7r61JAZBIPelmcq3YUgfiIVvI4TmxYIuvmpfiE3cc1DGvn0STDEjXDGOBPFZCzMWhprCyWjAZCnN5jtKO2wgXO03123mPgXZARluF82yTdczdGbeR1mExuVZCewySyY1pmc7x4ZB2b6dzsMDC988p4cCZCDbDG6TvujQZCIZD";
 
         if (msgType.equals("text")) {
-            System.out.println("message: " + msg);
+            System.out.println("Text message: " + msg);
 
             String patientUUID = msg.getJSONObject("text").getString("body").toUpperCase();
-            String loginLocationUuid= "833d0c66-e29a-4d31-ac13-ca9050d1bfa9";
 
-            String fullName = fetchPatientName(patientUUID, loginLocationUuid);
+            String fullName = fetchPatientName(patientUUID);
             System.out.println("Patient Name: " + fullName);
 
             JSONObject data = createActionTemplate(from, fullName);
@@ -271,12 +346,37 @@ public class WhatsAppAPIController {
             System.out.println("whatsapp message id: " + wa_id);
         }
         else if (msgType.equals("interactive")) {
-            JSONObject data = createTextMessage(from);
+            System.out.println("Interactive message: " + msg);
+            String patientResponse = msg.getJSONObject("interactive").getJSONObject("list_reply").getString("title");
 
-            System.out.println("Data blob: " + data);
-            String wa_id = sendMessage(phone_number_id, token, data);
+            JSONObject data;
 
-            System.out.println("whatsapp message id: " + wa_id);
+            if(patientResponse.equals("Book an Appointment")){
+                data = createServiceTemplate(from);
+
+                String wa_id = sendMessage(phone_number_id, token, data);
+
+                System.out.println("whatsapp message id: " + wa_id);
+            }
+            else if (!patientResponse.equals("Upcoming Appointments") && !patientResponse.equals("Cancel an Appointment") && !patientResponse.equals("Reschedule Appointment")){
+                int serviceID = Integer.parseInt(msg.getJSONObject("interactive").getJSONObject("list_reply").getString("id"));
+                String serviceUUID = serviceMap.get(serviceID);
+
+                String reply_message = "Your Appointment for " + patientResponse + " Consultation is scheduled for tomorrow from 10am to 11am. Your presence at the designated time slot is kindly requested.";
+                data = createTextMessage(from, reply_message);
+
+                String wa_id = sendMessage(phone_number_id, token, data);
+
+                System.out.println("whatsapp message id: " + wa_id);
+            }
+            else {
+                String reply_message = "Thanks for contacting Bahmni, This Feature will be live soon.";
+                data = createTextMessage(from, reply_message);
+
+                String wa_id = sendMessage(phone_number_id, token, data);
+
+                System.out.println("whatsapp message id: " + wa_id);
+            }
         }
 
         return new ResponseEntity<>(HttpStatus.OK);
