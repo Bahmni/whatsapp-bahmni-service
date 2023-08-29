@@ -6,7 +6,6 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.bahmni.webclients.ClientCookies;
-import org.bahmni.whatsapp.appointments.contract.patient.OpenMRSPatientFullRepresentation;
 import org.bahmni.whatsapp.appointments.services.FhirResourceService;
 import org.bahmni.whatsapp.appointments.services.OpenmrsLoginImpl;
 import org.json.JSONArray;
@@ -15,9 +14,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
-import org.bahmni.whatsapp.appointments.services.OpenMRSService;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.*;
 
@@ -31,8 +35,12 @@ public class WhatsAppAPIController {
     FhirResourceService fhirResourceService;
 
     HashMap<Integer,String> serviceMap= new HashMap<>();
+    HashMap<Integer,String> serviceNameMap= new HashMap<>();
 
-    public String fetchPatientName(String patientUUID) throws IOException, ParseException {
+    String patientUuid = "";
+    String patientId = "";
+
+    public String fetchPatientName() throws IOException, ParseException {
 //        String fhirBody = fhirResourceService.getResourceById("Patient", "5e91bcf8-aeec-4c7b-ab60-8c2aeb05cbee");
 //        System.out.println("fhir body: " + fhirBody);
 //
@@ -46,7 +54,7 @@ public class WhatsAppAPIController {
         ClientCookies cookies = openmrsLogin.getCookies();
         System.out.println("Cookie: " + cookies);
 
-        String URI = "https://demo-lite.mybahmni.in/openmrs/ws/fhir2/R4/Patient?identifier=" + patientUUID;
+        String URI = "https://demo-lite.mybahmni.in/openmrs/ws/fhir2/R4/Patient?identifier=" + patientId;
 
         HttpGet request = new HttpGet(URI);
 
@@ -62,6 +70,12 @@ public class WhatsAppAPIController {
         httpClient.close();
 
         JSONObject responseObject = new JSONObject(responseBody);
+
+        if(responseObject.getInt("total") == 0){
+            return "";
+        }
+
+        patientUuid = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getString("id");
 
         String firstName = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getJSONArray("name").getJSONObject(0).getJSONArray("given").getString(0);
         String familyName = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getJSONArray("name").getJSONObject(0).getString("family");
@@ -113,21 +127,9 @@ public class WhatsAppAPIController {
 
         JSONObject rowObj2 = new JSONObject();
         rowObj2.put("id", "1");
-        rowObj2.put("title", "Upcoming Appointments");
+        rowObj2.put("title", "Reschedule Appointment");
 
         rowArray.put(rowObj2);
-
-        JSONObject rowObj3 = new JSONObject();
-        rowObj3.put("id", "2");
-        rowObj3.put("title", "Cancel an Appointment");
-
-        rowArray.put(rowObj3);
-
-        JSONObject rowObj4 = new JSONObject();
-        rowObj4.put("id", "3");
-        rowObj4.put("title", "Reschedule Appointment");
-
-        rowArray.put(rowObj4);
 
         sectionObj.put("rows", rowArray);
 
@@ -205,6 +207,8 @@ public class WhatsAppAPIController {
 //            serviceName = serviceName.substring(0, Math.min(serviceName.length(), 24));
             serviceName = ( serviceName.length () > 24 ) ? serviceName.substring ( 0 , 21 ).concat ( "…" ) : serviceName;
 
+            serviceNameMap.put(serviceID, serviceName);
+
             JSONObject rowObj = new JSONObject();
             rowObj.put("id", Integer.toString(serviceID));
             rowObj.put("title", serviceName);
@@ -241,6 +245,51 @@ public class WhatsAppAPIController {
         return data;
     }
 
+    public String saveAppointment(String serviceUuid) throws IOException {
+        openmrsLogin.getConnection();
+        ClientCookies cookies = openmrsLogin.getCookies();
+        System.out.println("Cookie: " + cookies);
+
+        String cookieValue = cookies.get("JSESSIONID");
+
+        URL url = new URL ("https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/appointment");
+
+        HttpURLConnection con = (HttpURLConnection)url.openConnection();
+
+        con.setRequestMethod("POST");
+        con.setRequestProperty("Content-Type", "application/json");
+        con.setRequestProperty("Accept", "application/json");
+        con.setRequestProperty("Cookie", "JSESSIONID=" + cookieValue);
+        con.setDoOutput(true);
+
+        JSONObject appointmentDetails = new JSONObject();
+
+        appointmentDetails.put("appointmentKind", "Scheduled");
+        appointmentDetails.put("locationUuid", JSONObject.NULL);
+        appointmentDetails.put("patientUuid", patientUuid);
+        appointmentDetails.put("serviceUuid", serviceUuid);
+        appointmentDetails.put("providers", new JSONArray());
+        appointmentDetails.put("startDateTime", "2023-08-29T04:30:00.000Z");
+        appointmentDetails.put("endDateTime", "2023-08-29T05:30:00.000Z");
+
+        String appointmentInput = appointmentDetails.toString();
+
+        try(OutputStream os = con.getOutputStream()) {
+            byte[] input = appointmentInput.getBytes(StandardCharsets.UTF_8);
+            os.write(input, 0, input.length);
+        }
+
+        try(BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
+            StringBuilder response = new StringBuilder();
+            String responseLine;
+            while ((responseLine = br.readLine()) != null) {
+                response.append(responseLine.trim());
+            }
+
+            return String.valueOf(response);
+        }
+    }
+
     public String sendMessage(String phoneNumberId, String token, JSONObject data) throws IOException, ParseException {
         String url = "https://graph.facebook.com/v17.0/" + phoneNumberId + "/messages?access_token=" + token;
 
@@ -273,9 +322,6 @@ public class WhatsAppAPIController {
     public ResponseEntity<String> verifyWebhook(@RequestParam("hub.mode") String mode,
                                                 @RequestParam("hub.challenge") String challenge,
                                                 @RequestParam("hub.verify_token") String token) throws IOException, ParseException {
-        System.out.println(mode);
-        System.out.println(challenge);
-        System.out.println(token);
 
         openmrsLogin.getConnection();
         ClientCookies cookies = openmrsLogin.getCookies();
@@ -293,15 +339,12 @@ public class WhatsAppAPIController {
     @RequestMapping( method = RequestMethod.POST, value = "webhook")
     public ResponseEntity<String> notificationHandler(@RequestBody String requestBody) throws IOException, ParseException {
 
-        // Parse the JSON request body
         JSONObject body = new JSONObject(requestBody);
         System.out.println("Json body: " + body);
 
         if (!body.has("object")) {
-            // Return a '404 Not Found' if event is not from a WhatsApp API
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
-
 
         if (!body.has("entry") ||
                 body.getJSONArray("entry").length() <= 0 ||
@@ -328,26 +371,39 @@ public class WhatsAppAPIController {
         String from = msg.getString("from"); // Phone Number of Patient
 
         String phone_number_id = "109855275525315";
-        String token = "EAAJLW2eCmuQBO3arqKcNcvc27FYSgGQZBSpfOXdEsPamQ5dZAPSXy2Vt4a7r61JAZBIPelmcq3YUgfiIVvI4TmxYIuvmpfiE3cc1DGvn0STDEjXDGOBPFZCzMWhprCyWjAZCnN5jtKO2wgXO03123mPgXZARluF82yTdczdGbeR1mExuVZCewySyY1pmc7x4ZB2b6dzsMDC988p4cCZCDbDG6TvujQZCIZD";
+        String token = "EAAJLW2eCmuQBOZBEVNsZAKGr1cgBxC9GgQwtTeXxxOZBOAbMxQUHIqt50YiU0xZBhK7TX0D0IIKCZCM23pFwgEI89R4cs0ZA7ZBlLThI7MwIhkjE7ZCcwZATcxviQDa69tuCjsyFaAmJayxnTHOR0mToWcheGPfCL8k4ZBVj4PTZAZBWOgeQZB9P2ojM4GsE9ZBldWCHI0BR2TGuPKT7OBlsg83FEHwck4rFMZD";
 
         if (msgType.equals("text")) {
+            JSONObject data;
             System.out.println("Text message: " + msg);
 
-            String patientUUID = msg.getJSONObject("text").getString("body").toUpperCase();
+            patientId = msg.getJSONObject("text").getString("body").toUpperCase();
 
-            String fullName = fetchPatientName(patientUUID);
-            System.out.println("Patient Name: " + fullName);
+            String fullName = fetchPatientName();
 
-            JSONObject data = createActionTemplate(from, fullName);
+            if(fullName.equals("")){
+                String reply_message = "Please re-enter your Identifier correctly!";
+                data = createTextMessage(from, reply_message);
 
-            System.out.println("Data blob: " + data);
-            String wa_id = sendMessage(phone_number_id, token, data);
+                String wa_id = sendMessage(phone_number_id, token, data);
 
-            System.out.println("whatsapp message id: " + wa_id);
+                System.out.println("whatsapp message id: " + wa_id);
+            }
+            else {
+                System.out.println("Patient Name: " + fullName);
+
+                data = createActionTemplate(from, fullName);
+
+                System.out.println("Data blob: " + data);
+                String wa_id = sendMessage(phone_number_id, token, data);
+
+                System.out.println("whatsapp message id: " + wa_id);
+            }
         }
         else if (msgType.equals("interactive")) {
             System.out.println("Interactive message: " + msg);
             String patientResponse = msg.getJSONObject("interactive").getJSONObject("list_reply").getString("title");
+            int responseId = Integer.parseInt(msg.getJSONObject("interactive").getJSONObject("list_reply").getString("id"));
 
             JSONObject data;
 
@@ -358,14 +414,17 @@ public class WhatsAppAPIController {
 
                 System.out.println("whatsapp message id: " + wa_id);
             }
-            else if (!patientResponse.equals("Upcoming Appointments") && !patientResponse.equals("Cancel an Appointment") && !patientResponse.equals("Reschedule Appointment")){
-                int serviceID = Integer.parseInt(msg.getJSONObject("interactive").getJSONObject("list_reply").getString("id"));
-                String serviceUUID = serviceMap.get(serviceID);
+            else if (patientResponse.equals(serviceNameMap.get(responseId))){
+                String serviceUuid = serviceMap.get(responseId);
 
-                String reply_message = "Your Appointment for " + patientResponse + " Consultation is scheduled for tomorrow from 10am to 11am. Your presence at the designated time slot is kindly requested.";
+                String reply_message = "Your Appointment for " + patientResponse + " is scheduled for tomorrow from 10am to 11am. Your presence at the designated time slot is kindly requested.";
                 data = createTextMessage(from, reply_message);
 
                 String wa_id = sendMessage(phone_number_id, token, data);
+
+                String appointmentResponse = saveAppointment(serviceUuid);
+
+                System.out.println("Saved Appointment response: " + appointmentResponse);
 
                 System.out.println("whatsapp message id: " + wa_id);
             }
