@@ -23,6 +23,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @RestController
@@ -39,6 +41,10 @@ public class WhatsAppAPIController {
 
     String patientUuid = "";
     String patientId = "";
+
+    String serviceUuid = "";
+
+    String chosenService = "";
 
     public String fetchPatientName() throws IOException, ParseException {
 //        String fhirBody = fhirResourceService.getResourceById("Patient", "5e91bcf8-aeec-4c7b-ab60-8c2aeb05cbee");
@@ -229,6 +235,69 @@ public class WhatsAppAPIController {
         return data;
     }
 
+    public JSONObject createSlotTemplate(String from){
+        String slot_template_body = "Please choose a suitable slot for your appointment.";
+
+        JSONObject data = new JSONObject();
+
+        data.put("messaging_product", "whatsapp");
+        data.put("to", from);
+        data.put("type", "interactive");
+
+        JSONObject interactiveObj = new JSONObject();
+        interactiveObj.put("type", "list");
+
+        JSONObject bodyObj = new JSONObject();
+        bodyObj.put("text", slot_template_body);
+
+        interactiveObj.put("body", bodyObj);
+
+        JSONObject footerObj = new JSONObject();
+        footerObj.put("text", "Bahmni");
+
+        interactiveObj.put("footer", footerObj);
+
+        JSONObject actionObj = new JSONObject();
+        actionObj.put("button", "Choose Slot");
+
+        JSONArray sectionsArray = new JSONArray();
+
+        JSONObject sectionObj = new JSONObject();
+        sectionObj.put("title", "Please choose a Slot.");
+
+        JSONArray rowArray = new JSONArray();
+
+        JSONObject rowObj1 = new JSONObject();
+        rowObj1.put("id", "0");
+        rowObj1.put("title", "Tomorrow Morning");
+
+        rowArray.put(rowObj1);
+
+        JSONObject rowObj2 = new JSONObject();
+        rowObj2.put("id", "1");
+        rowObj2.put("title", "Tomorrow Afternoon");
+
+        rowArray.put(rowObj2);
+
+        JSONObject rowObj3 = new JSONObject();
+        rowObj3.put("id", "2");
+        rowObj3.put("title", "Tomorrow Evening");
+
+        rowArray.put(rowObj3);
+
+        sectionObj.put("rows", rowArray);
+
+        sectionsArray.put(sectionObj);
+
+        actionObj.put("sections", sectionsArray);
+
+        interactiveObj.put("action", actionObj);
+
+        data.put("interactive", interactiveObj);
+
+        return data;
+    }
+
     public JSONObject createTextMessage(String from, String reply_message){
 
         JSONObject data = new JSONObject();
@@ -245,7 +314,7 @@ public class WhatsAppAPIController {
         return data;
     }
 
-    public String saveAppointment(String serviceUuid) throws IOException {
+    public String saveAppointment(String serviceUuid, String patientResponse) throws IOException {
         openmrsLogin.getConnection();
         ClientCookies cookies = openmrsLogin.getCookies();
         System.out.println("Cookie: " + cookies);
@@ -269,8 +338,26 @@ public class WhatsAppAPIController {
         appointmentDetails.put("patientUuid", patientUuid);
         appointmentDetails.put("serviceUuid", serviceUuid);
         appointmentDetails.put("providers", new JSONArray());
-        appointmentDetails.put("startDateTime", "2023-08-29T04:30:00.000Z");
-        appointmentDetails.put("endDateTime", "2023-08-29T05:30:00.000Z");
+
+        LocalDate todayDate = LocalDate.now();
+        String tomorrowDate = (todayDate.plusDays(1)).format(DateTimeFormatter.ISO_DATE);
+
+        System.out.println("Date: " + tomorrowDate);
+
+        switch (patientResponse) {
+            case "Tomorrow Morning":
+                appointmentDetails.put("startDateTime", tomorrowDate + "T04:30:00.000Z");
+                appointmentDetails.put("endDateTime", tomorrowDate + "T05:30:00.000Z");
+                break;
+            case "Tomorrow Afternoon":
+                appointmentDetails.put("startDateTime", tomorrowDate + "T08:30:00.000Z");
+                appointmentDetails.put("endDateTime", tomorrowDate + "T09:30:00.000Z");
+                break;
+            case "Tomorrow Evening":
+                appointmentDetails.put("startDateTime", tomorrowDate + "T12:30:00.000Z");
+                appointmentDetails.put("endDateTime", tomorrowDate + "T13:30:00.000Z");
+                break;
+        }
 
         String appointmentInput = appointmentDetails.toString();
 
@@ -371,7 +458,7 @@ public class WhatsAppAPIController {
         String from = msg.getString("from"); // Phone Number of Patient
 
         String phone_number_id = "109855275525315";
-        String token = "EAAJLW2eCmuQBOZBEVNsZAKGr1cgBxC9GgQwtTeXxxOZBOAbMxQUHIqt50YiU0xZBhK7TX0D0IIKCZCM23pFwgEI89R4cs0ZA7ZBlLThI7MwIhkjE7ZCcwZATcxviQDa69tuCjsyFaAmJayxnTHOR0mToWcheGPfCL8k4ZBVj4PTZAZBWOgeQZB9P2ojM4GsE9ZBldWCHI0BR2TGuPKT7OBlsg83FEHwck4rFMZD";
+        String token = "EAAJLW2eCmuQBO7CTkUqWUcZAvZCTr5aI31MnjNZBFzKUeEq6eu2kdbHEPL5zU6yJwzZBC8EyA0rvZCmFZB3rZAmq7vSuNZBAtocufZAnGvGEq9jGr1MmIAwPuenl95A8ThBzZAQsPih51jxPqZC8sNFzmBb1elXNoZBAPk2sb6AltdZBYad0vgLMkKF2jEkoiIZApbCjK1pJZAjMc44OPwHIXkSOEago27AstL7";
 
         if (msgType.equals("text")) {
             JSONObject data;
@@ -386,8 +473,6 @@ public class WhatsAppAPIController {
                 data = createTextMessage(from, reply_message);
 
                 String wa_id = sendMessage(phone_number_id, token, data);
-
-                System.out.println("whatsapp message id: " + wa_id);
             }
             else {
                 System.out.println("Patient Name: " + fullName);
@@ -396,8 +481,6 @@ public class WhatsAppAPIController {
 
                 System.out.println("Data blob: " + data);
                 String wa_id = sendMessage(phone_number_id, token, data);
-
-                System.out.println("whatsapp message id: " + wa_id);
             }
         }
         else if (msgType.equals("interactive")) {
@@ -411,30 +494,43 @@ public class WhatsAppAPIController {
                 data = createServiceTemplate(from);
 
                 String wa_id = sendMessage(phone_number_id, token, data);
-
-                System.out.println("whatsapp message id: " + wa_id);
             }
             else if (patientResponse.equals(serviceNameMap.get(responseId))){
-                String serviceUuid = serviceMap.get(responseId);
+                serviceUuid = serviceMap.get(responseId);
+                chosenService = serviceNameMap.get(responseId);
 
-                String reply_message = "Your Appointment for " + patientResponse + " is scheduled for tomorrow from 10am to 11am. Your presence at the designated time slot is kindly requested.";
+                data = createSlotTemplate(from);
+
+                String wa_id = sendMessage(phone_number_id, token, data);
+            }
+            else if (patientResponse.equals("Tomorrow Morning") || patientResponse.equals("Tomorrow Afternoon") || patientResponse.equals("Tomorrow Evening")){
+                String reply_message = "";
+
+                switch (patientResponse) {
+                    case "Tomorrow Morning":
+                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 10am to 11am. Your presence at the designated slot is kindly requested.";
+                        break;
+                    case "Tomorrow Afternoon":
+                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 2pm to 3pm. Your presence at the designated slot is kindly requested.";
+                        break;
+                    case "Tomorrow Evening":
+                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 6pm to 7pm. Your presence at the designated slot is kindly requested.";
+                        break;
+                }
+
                 data = createTextMessage(from, reply_message);
 
                 String wa_id = sendMessage(phone_number_id, token, data);
 
-                String appointmentResponse = saveAppointment(serviceUuid);
+                String appointmentResponse = saveAppointment(serviceUuid, patientResponse);
 
                 System.out.println("Saved Appointment response: " + appointmentResponse);
-
-                System.out.println("whatsapp message id: " + wa_id);
             }
             else {
                 String reply_message = "Thanks for contacting Bahmni, This Feature will be live soon.";
                 data = createTextMessage(from, reply_message);
 
                 String wa_id = sendMessage(phone_number_id, token, data);
-
-                System.out.println("whatsapp message id: " + wa_id);
             }
         }
 
