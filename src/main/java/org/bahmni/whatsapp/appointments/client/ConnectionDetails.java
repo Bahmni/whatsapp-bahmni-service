@@ -5,7 +5,7 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.stereotype.Controller;
 
 @Controller
-@PropertySource("classpath:atomfeed.properties")
+@PropertySource("classpath:application.properties")
 public class ConnectionDetails {
     private static String AUTH_URI;
     private static String OPENMRS_USER;
