@@ -1,177 +1,48 @@
 package org.bahmni.whatsapp.appointments;
 
-import org.apache.http.HttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
-import org.bahmni.webclients.ClientCookies;
-import org.bahmni.whatsapp.appointments.services.OpenmrsLoginImpl;
+import org.bahmni.whatsapp.appointments.helper.PatientName;
+import org.bahmni.whatsapp.appointments.helper.PatientUuid;
+import org.bahmni.whatsapp.appointments.helper.ReplyToPatient;
+import org.bahmni.whatsapp.appointments.helper.SaveChosenSlot;
 import org.bahmni.whatsapp.appointments.wa.templates.ActionTemplate;
 import org.bahmni.whatsapp.appointments.wa.templates.ServiceTemplate;
 import org.bahmni.whatsapp.appointments.wa.templates.SlotTemplate;
 import org.bahmni.whatsapp.appointments.wa.templates.TextTemplate;
-import org.json.JSONArray;
 import org.json.JSONObject;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 
 @RestController
 public class WhatsAppAPIController {
 
-    @Autowired
-    OpenmrsLoginImpl openmrsLogin;
+    ServiceTemplate serviceTemplate = new ServiceTemplate();
 
-    ServiceTemplate serviceTemplate;
+    ActionTemplate actionTemplate = new ActionTemplate();
 
-    ActionTemplate actionTemplate;
+    SlotTemplate slotTemplate = new SlotTemplate();
 
-    SlotTemplate slotTemplate;
+    TextTemplate textTemplate = new TextTemplate();
 
-    TextTemplate textTemplate;
+    PatientName patientName = new PatientName();
 
-    String patientUuid = "";
-    String patientId = "";
+    PatientUuid patientUuid = new PatientUuid();
 
+    SaveChosenSlot saveChosenSlot = new SaveChosenSlot();
+
+    ReplyToPatient replyToPatient = new ReplyToPatient();
+
+    String patientUUID = "";
     String serviceUuid = "";
-
     String chosenService = "";
-
-    public String fetchPatientName() throws IOException, ParseException {
-
-        openmrsLogin.getConnection();
-        ClientCookies cookies = openmrsLogin.getCookies();
-
-        String URI = "https://demo-lite.mybahmni.in/openmrs/ws/fhir2/R4/Patient?identifier=" + patientId;
-
-        HttpGet request = new HttpGet(URI);
-
-        String cookieValue = cookies.get("JSESSIONID");
-        request.addHeader("Cookie", "JSESSIONID=" + cookieValue);
-
-        CloseableHttpClient httpClient = HttpClients.createDefault();
-        HttpResponse response = httpClient.execute(request);
-
-        String responseBody = EntityUtils.toString(response.getEntity(), "UTF-8");
-
-        httpClient.close();
-
-        JSONObject responseObject = new JSONObject(responseBody);
-
-        if(responseObject.getInt("total") == 0){
-            return "";
-        }
-
-        patientUuid = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getString("id");
-
-        String firstName = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getJSONArray("name").getJSONObject(0).getJSONArray("given").getString(0);
-        String familyName = responseObject.getJSONArray("entry").getJSONObject(0).getJSONObject("resource").getJSONArray("name").getJSONObject(0).getString("family");
-
-        return firstName + " " + familyName;
-    }
-
-    public String saveAppointment(String serviceUuid, String patientResponse) throws IOException {
-        openmrsLogin.getConnection();
-        ClientCookies cookies = openmrsLogin.getCookies();
-
-        String cookieValue = cookies.get("JSESSIONID");
-
-        URL url = new URL ("https://demo-lite.mybahmni.in/openmrs/ws/rest/v1/appointment");
-
-        HttpURLConnection con = (HttpURLConnection)url.openConnection();
-
-        con.setRequestMethod("POST");
-        con.setRequestProperty("Content-Type", "application/json");
-        con.setRequestProperty("Accept", "application/json");
-        con.setRequestProperty("Cookie", "JSESSIONID=" + cookieValue);
-        con.setDoOutput(true);
-
-        JSONObject appointmentDetails = new JSONObject();
-
-        appointmentDetails.put("appointmentKind", "Scheduled");
-        appointmentDetails.put("locationUuid", JSONObject.NULL);
-        appointmentDetails.put("patientUuid", patientUuid);
-        appointmentDetails.put("serviceUuid", serviceUuid);
-        appointmentDetails.put("providers", new JSONArray());
-
-        LocalDate todayDate = LocalDate.now();
-        String tomorrowDate = (todayDate.plusDays(1)).format(DateTimeFormatter.ISO_DATE);
-
-        switch (patientResponse) {
-            case "Tomorrow Morning":
-                appointmentDetails.put("startDateTime", tomorrowDate + "T04:30:00.000Z");
-                appointmentDetails.put("endDateTime", tomorrowDate + "T05:30:00.000Z");
-                break;
-            case "Tomorrow Afternoon":
-                appointmentDetails.put("startDateTime", tomorrowDate + "T08:30:00.000Z");
-                appointmentDetails.put("endDateTime", tomorrowDate + "T09:30:00.000Z");
-                break;
-            case "Tomorrow Evening":
-                appointmentDetails.put("startDateTime", tomorrowDate + "T12:30:00.000Z");
-                appointmentDetails.put("endDateTime", tomorrowDate + "T13:30:00.000Z");
-                break;
-        }
-
-        String appointmentInput = appointmentDetails.toString();
-
-        try(OutputStream os = con.getOutputStream()) {
-            byte[] input = appointmentInput.getBytes(StandardCharsets.UTF_8);
-            os.write(input, 0, input.length);
-        }
-
-        try(BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
-            StringBuilder response = new StringBuilder();
-            String responseLine;
-            while ((responseLine = br.readLine()) != null) {
-                response.append(responseLine.trim());
-            }
-
-            return String.valueOf(response);
-        }
-    }
-
-    public String sendMessage(String phoneNumberId, String token, JSONObject data) throws IOException, ParseException {
-        String url = "https://graph.facebook.com/v17.0/" + phoneNumberId + "/messages?access_token=" + token;
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        HttpEntity<String> requestEntity = new HttpEntity<>(data.toString(), headers);
-
-        RestTemplate restTemplate = new RestTemplate();
-        ResponseEntity<String> responseEntity = restTemplate.postForEntity(url, requestEntity, String.class);
-
-        String jsonResponse = responseEntity.getBody();
-
-        JSONObject responseJson = new JSONObject(jsonResponse);
-
-        String message_id = "";
-        JSONArray messages = responseJson.getJSONArray("messages");
-        if (messages.length() > 0) {
-            JSONObject msg = messages.getJSONObject(0);
-            message_id = msg.getString("id");
-        }
-
-        return message_id;
-    }
 
     @RequestMapping(method = RequestMethod.GET, value = "webhook")
     public ResponseEntity<String> verifyWebhook(@RequestParam("hub.mode") String mode,
                                                 @RequestParam("hub.challenge") String challenge,
-                                                @RequestParam("hub.verify_token") String token) throws IOException, ParseException {
+                                                @RequestParam("hub.verify_token") String token) {
 
         if (mode.equals("subscribe") && token.equals("abc123")) {
             return new ResponseEntity<>(challenge, HttpStatus.OK);
@@ -212,24 +83,25 @@ public class WhatsAppAPIController {
         String from = msg.getString("from");
 
         String phone_number_id = "109855275525315";
-        String token = "EAAJLW2eCmuQBO0RnZAHgjZCF666HscXxZBy7CwgmBmMTPgWTpwtrhDjaxwCLYqDLLnsYvEHRpZA7RqESdoOwje1PLOroZBdMD7BDZBg27gO6eKhRC2wpR7jw5C4KpxZCIixonGvCBhTZA3gk9ZBvnslDYTmyQxXqxaEpdGADJWQrZBvAYP242xMH7behlbiMARN23HEFpZAgSmzZB9sWPcJ05g5id0P5t1oZD";
+        String token = "EAAJLW2eCmuQBO6IHch4KbJu1qPc1dPUZBjGUkaA87mXu7PIfwITU14xoMOPIfvNtOyvvRFAS9ABN8uV4iSjT24U432vzjiZAU8IIKyX978e6swrdMGjrbv9fZBB0zwwlmf4xia73avL5iEyhhrcZBEHOPndAcEhrM5xRACr1dHQOp4vLZBlhtAit33naZAoTaZAIm4aYlZAdjblRoIzAQObCZBRX8vR0ZD";
 
         if (msgType.equals("text")) {
             JSONObject data;
 
-            patientId = msg.getJSONObject("text").getString("body").toUpperCase();
+            String patientId = msg.getJSONObject("text").getString("body").toUpperCase();
 
-            String fullName = fetchPatientName();
+            String fullName = patientName.fetchPatientName(patientId);
 
             if(fullName.equals("")){
                 String reply_message = "Please re-enter your Identifier correctly!";
                 data = textTemplate.createTextMessage(from, reply_message);
             }
             else {
+                patientUUID = patientUuid.fetchPatientUuid(patientId);
                 data = actionTemplate.createActionTemplate(from, fullName);
             }
 
-            String wa_id = sendMessage(phone_number_id, token, data);
+            replyToPatient.sendMessage(phone_number_id, token, data);
         }
         else if (msgType.equals("interactive")) {
             String patientResponse = msg.getJSONObject("interactive").getJSONObject("list_reply").getString("title");
@@ -240,7 +112,7 @@ public class WhatsAppAPIController {
             if(patientResponse.equals("Book an Appointment")){
                 data = serviceTemplate.createServiceTemplate(from);
 
-                String wa_id = sendMessage(phone_number_id, token, data);
+                replyToPatient.sendMessage(phone_number_id, token, data);
             }
             else if (patientResponse.equals(serviceTemplate.serviceNameMap.get(responseId))){
                 serviceUuid = serviceTemplate.serviceMap.get(responseId);
@@ -248,34 +120,34 @@ public class WhatsAppAPIController {
 
                 data = slotTemplate.createSlotTemplate(from);
 
-                String wa_id = sendMessage(phone_number_id, token, data);
+                replyToPatient.sendMessage(phone_number_id, token, data);
             }
             else if (patientResponse.equals("Tomorrow Morning") || patientResponse.equals("Tomorrow Afternoon") || patientResponse.equals("Tomorrow Evening")){
                 String reply_message = "";
 
                 switch (patientResponse) {
                     case "Tomorrow Morning":
-                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 10am to 11am. Your presence at the designated slot is kindly requested.";
+                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 10 am to 11 am. Your presence at the designated slot is kindly requested.";
                         break;
                     case "Tomorrow Afternoon":
-                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 2pm to 3pm. Your presence at the designated slot is kindly requested.";
+                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 2 pm to 3 pm. Your presence at the designated slot is kindly requested.";
                         break;
                     case "Tomorrow Evening":
-                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 6pm to 7pm. Your presence at the designated slot is kindly requested.";
+                        reply_message = "Your Appointment for " + chosenService + " is scheduled for " + patientResponse.toLowerCase() + " from 6 pm to 7 pm. Your presence at the designated slot is kindly requested.";
                         break;
                 }
 
                 data = textTemplate.createTextMessage(from, reply_message);
 
-                String wa_id = sendMessage(phone_number_id, token, data);
+                replyToPatient.sendMessage(phone_number_id, token, data);
 
-                String appointmentResponse = saveAppointment(serviceUuid, patientResponse);
+                saveChosenSlot.saveAppointment(serviceUuid, patientUUID, patientResponse);
             }
             else {
                 String reply_message = "Thanks for contacting Bahmni, This Feature will be live soon.";
                 data = textTemplate.createTextMessage(from, reply_message);
 
-                String wa_id = sendMessage(phone_number_id, token, data);
+                replyToPatient.sendMessage(phone_number_id, token, data);
             }
         }
 

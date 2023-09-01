@@ -17,7 +17,7 @@ import java.util.HashMap;
 public class ServiceTemplate {
 
     @Autowired
-    OpenmrsLoginImpl openmrsLogin;
+    OpenmrsLoginImpl openmrsLogin = new OpenmrsLoginImpl();
 
     public HashMap<Integer,String> serviceMap= new HashMap<>();
     public HashMap<Integer,String> serviceNameMap= new HashMap<>();
