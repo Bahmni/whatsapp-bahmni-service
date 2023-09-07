@@ -23,7 +23,6 @@ public class OpenmrsLoginImpl {
     public void getCookiesAfterConnection(HttpClient authenticatedWebClient, String urlString) {
         try {
             this.cookies = authenticatedWebClient.getCookies(new URI(urlString));
-            System.out.print("Cookie: " + this.cookies);
         } catch (URISyntaxException e) {
             throw new RuntimeException("Is not a valid URI - " + urlString);
         }
